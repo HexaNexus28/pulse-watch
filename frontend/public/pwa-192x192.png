@@ -1,0 +1,57 @@
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background with gradient -->
+  <defs>
+    <linearGradient id="bgGradientLarge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1D4ED8;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="pulseGradientLarge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#60A5FA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3B82F6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="chartGradientLarge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main background rounded rectangle -->
+  <rect x="8" y="8" width="176" height="176" rx="48" fill="url(#bgGradientLarge)"/>
+  
+  <!-- Pulse wave lines -->
+  <path d="M 36 96 Q 60 72, 84 96 T 132 96 T 156 96" 
+        stroke="url(#pulseGradientLarge)" 
+        stroke-width="8" 
+        fill="none" 
+        stroke-linecap="round"
+        opacity="0.9"/>
+  
+  <!-- Trend chart line -->
+  <polyline points="48,120 72,108 96,84 120,72 144,60" 
+            stroke="url(#chartGradientLarge)" 
+            stroke-width="6" 
+            fill="none" 
+            stroke-linecap="round" 
+            stroke-linejoin="round"
+            opacity="0.8"/>
+  
+  <!-- Data points -->
+  <circle cx="48" cy="120" r="6" fill="#10B981"/>
+  <circle cx="72" cy="108" r="6" fill="#10B981"/>
+  <circle cx="96" cy="84" r="8" fill="#059669"/>
+  <circle cx="120" cy="72" r="6" fill="#10B981"/>
+  <circle cx="144" cy="60" r="6" fill="#10B981"/>
+  
+  <!-- Central monitoring symbol -->
+  <g transform="translate(96, 96)">
+    <circle cx="0" cy="0" r="24" fill="none" stroke="white" stroke-width="4" opacity="0.9"/>
+    <circle cx="0" cy="0" r="12" fill="white" opacity="0.8"/>
+    <circle cx="0" cy="0" r="6" fill="#1D4ED8"/>
+  </g>
+  
+  <!-- RSS signal waves -->
+  <g transform="translate(96, 96)" opacity="0.7">
+    <path d="M -18 -18 Q 0 -24, 18 -18" stroke="white" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M -30 -30 Q 0 -39, 30 -30" stroke="white" stroke-width="4" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>

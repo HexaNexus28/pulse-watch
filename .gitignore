@@ -1,0 +1,15 @@
+
+# ── .NET build/cache ──
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+
+# ── Secrets ──
+.env
+**/.env
+appsettings.*.json
+!appsettings.json
+
+# ── Node ──
+node_modules/
