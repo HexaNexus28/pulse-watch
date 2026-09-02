@@ -306,32 +306,25 @@ namespace PulseWatch.Business.Services
                 // 6. Calculer le score global (moyenne des scores normalisés)
                 var score = Math.Round(trendsData.Values.Average() * 100);
 
-                // 7. Ajouter des métadonnées enrichies
-                var enrichedData = new Dictionary<string, object>
-                {
-                    ["keywords"] = trendsData.Keys.ToList(),
-                    ["keywordScores"] = trendsData,
-                    ["totalArticles"] = articleTitles.Count,
-                    ["totalFeeds"] = feeds.Count,
-                    ["analysisDate"] = DateTime.UtcNow,
-                    ["category"] = category.Name
-                };
-
-                // 8. Créer le trend avec les vraies données
+                // 7. Créer le trend. Data porte le couple mot-clé -> score normalisé, comme
+                // l'entité et TrendResponseDto le déclarent (Dictionary<string, double>).
                 var trend = new Trend
                 {
                     CategoryId = categoryId,
-                    Score = (int)score,
-                    Data = enrichedData,
-                    GeneratedAt = DateTime.UtcNow,
-                    ExpiresAt = DateTime.UtcNow.AddDays(7) // Expire après 7 jours
+                    Score = score,
+                    Data = trendsData,
+                    GeneratedAt = DateTime.UtcNow
                 };
 
                 await _unitOfWork.Trends.AddAsync(trend);
                 await _unitOfWork.SaveChangesAsync();
 
-                _logger.LogInformation("Trend généré avec succès pour categoryId: {CategoryId}, TrendId: {TrendId}, Score: {Score}", 
-                    categoryId, trend.Id, trend.Score);
+                // Les volumes analysés ne sont pas persistés : ils vivent dans le journal.
+                _logger.LogInformation(
+                    "Trend {TrendId} généré pour la catégorie {CategoryId} ({CategoryName}) : " +
+                    "{KeywordCount} mots-clés issus de {ArticleCount} articles sur {FeedCount} flux, score {Score}",
+                    trend.Id, categoryId, category.Name, trendsData.Count,
+                    articleTitles.Count, feeds.Count(), trend.Score);
 
                 var trendDto = _mapper.Map<TrendResponseDto>(trend);
                 return ApiResponse<TrendResponseDto>.SuccessResponse(trendDto, $"Trend generated successfully with {trendsData.Count} keywords");

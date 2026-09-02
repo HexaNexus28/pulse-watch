@@ -279,7 +279,7 @@ namespace PulseWatch.Business.Services
                 }
 
                 var tokenHandler = new JwtSecurityTokenHandler();
-                var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Key"] ?? "DefaultSecretKey123456789");
+                var key = Encoding.UTF8.GetBytes(GetJwtKey());
 
                 try
                 {
@@ -312,10 +312,27 @@ namespace PulseWatch.Business.Services
             }
         }
 
+        /// <summary>
+        /// Clé de signature des jetons. Absente, la configuration est invalide et on refuse :
+        /// une clé de repli en dur est publique, donc tous les jetons deviennent forgeables.
+        /// Encodage UTF8, identique à celui de la validation dans Program.cs — deux encodages
+        /// différents produisent deux clés différentes et rejettent silencieusement les jetons.
+        /// </summary>
+        private string GetJwtKey()
+        {
+            var key = _configuration["Jwt:Key"];
+
+            if (string.IsNullOrWhiteSpace(key))
+                throw new InvalidOperationException(
+                    "Jwt:Key n'est pas configurée. Renseigner la variable d'environnement Jwt__Key (32 caractères minimum).");
+
+            return key;
+        }
+
         private string GenerateJwtToken(User user)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Key"] ?? "DefaultSecretKey123456789");
+            var key = Encoding.UTF8.GetBytes(GetJwtKey());
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(new[]
