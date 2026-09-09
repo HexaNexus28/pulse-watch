@@ -1,6 +1,7 @@
 ﻿using AutoMapper;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using PulseWatch.Core.Dtos.Request;
 using PulseWatch.Core.Dtos.Response;
 using PulseWatch.Core.Entities;
 using PulseWatch.Core.Interfaces.Repositories;
@@ -19,13 +20,21 @@ namespace PulseWatch.Business.Services
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
         private readonly ILogger<SummaryService> _logger;
+        private readonly IFeedService _feedService;
+        private readonly IDigestGenerator _digestGenerator;
 
-        public SummaryService(IUnitOfWork unitOfWork, IMapper mapper, ILogger<SummaryService> logger)
+        public SummaryService(
+            IUnitOfWork unitOfWork,
+            IMapper mapper,
+            ILogger<SummaryService> logger,
+            IFeedService feedService,
+            IDigestGenerator digestGenerator)
         {
-
             _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _feedService = feedService ?? throw new ArgumentNullException(nameof(feedService));
+            _digestGenerator = digestGenerator ?? throw new ArgumentNullException(nameof(digestGenerator));
         }
 
 
@@ -168,12 +177,12 @@ namespace PulseWatch.Business.Services
                         var articles = feedContentResult.Data.Take(10); // Limiter à 10 articles par feed
                         foreach (var article in articles)
                         {
-                            if (!string.IsNullOrEmpty(article.Content) && article.Content.Length > 100)
+                            if (!string.IsNullOrWhiteSpace(article.Description))
                             {
                                 articleContents.Add((
                                     article.Title,
-                                    article.Content,
-                                    article.Url,
+                                    article.Description,
+                                    article.Link,
                                     feed.Name
                                 ));
                             }
@@ -226,92 +235,66 @@ namespace PulseWatch.Business.Services
             return ApiResponse<SummaryResponseDto>.SuccessResponse(responseDto, "Summary generated successfully");
         }
 
-        private async Task<string> GenerateContentSummaryAsync(List<(string Title, string Content, string Url, string Source)> articles, string categoryName)
+        /// <summary>
+        /// Envoie les articles a l'agent ADK et rend le digest en markdown.
+        /// </summary>
+        /// <remarks>
+        /// Remplace l'ancien GenerateContentSummaryAsync, qui n'etait pas un
+        /// resume : il decoupait chaque article en phrases, comptait les mots de
+        /// plus de 4 lettres et recollait 6 phrases brutes. Aucune synthese,
+        /// aucune deduplication, aucune verification des sources.
+        ///
+        /// Pas de repli silencieux vers l'ancien comportement en cas de panne de
+        /// l'agent : un faux resume rendu sans erreur masquerait la panne pendant
+        /// des semaines. L'exception remonte et l'appelant repond en erreur.
+        /// </remarks>
+        private async Task<string> GenerateContentSummaryAsync(
+            List<(string Title, string Content, string Url, string Source)> articles,
+            string categoryName,
+            CancellationToken cancellationToken = default)
         {
-            try
+            var payload = articles
+                .Select(a => new DigestArticleDto
+                {
+                    Title = a.Title,
+                    Excerpt = a.Content,
+                    Url = a.Url,
+                    Source = a.Source,
+                })
+                .ToList();
+
+            var digest = await _digestGenerator.GenerateAsync(categoryName, payload, cancellationToken);
+
+            _logger.LogInformation(
+                "Digest agent kept {Kept} stories out of {Total} articles for {Category}",
+                digest.Items.Count, articles.Count, categoryName);
+
+            return RenderDigest(digest, articles.Count);
+        }
+
+        /// <summary>
+        /// Markdown stocke dans Summary.Content. Le rendu vit ici et non dans
+        /// l'agent : l'agent renvoie une structure, la mise en forme est une
+        /// decision de presentation qui appartient a l'application.
+        /// </summary>
+        private static string RenderDigest(DigestDto digest, int articleCount)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine($"**{digest.Category}** - {digest.Items.Count} sujets retenus sur {articleCount} articles ({digest.DroppedCount} ecartes)");
+            builder.AppendLine();
+
+            foreach (var item in digest.Items)
             {
-                // 1. Extraire les phrases clés de chaque article
-                var keySentences = new List<string>();
-                var sources = new HashSet<string>();
-                
-                foreach (var article in articles)
+                builder.AppendLine($"### {item.Headline}");
+                builder.AppendLine(item.WhyItMatters);
+                foreach (var source in item.Sources)
                 {
-                    sources.Add(article.Source);
-                    
-                    // Nettoyer et diviser le contenu en phrases
-                    var sentences = article.Content
-                        .Split(new[] { '.', '!', '?', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Where(s => s.Trim().Length > 20) // Ignorer les phrases trop courtes
-                        .Select(s => s.Trim())
-                        .Take(5) // Prendre les 5 premières phrases par article
-                        .ToList();
-                    
-                    keySentences.AddRange(sentences);
+                    builder.AppendLine($"- {source}");
                 }
-
-                // 2. Identifier les thèmes principaux par analyse de fréquence
-                var allText = string.Join(" ", keySentences).ToLower();
-                var words = allText
-                    .Split(new[] { ' ', ',', '.', ';', '!', '?', '-', '_', '(', ')', '"', '\'' }, 
-                           StringSplitOptions.RemoveEmptyEntries)
-                    .Where(word => word.Length > 4 && !_stopWords.Contains(word))
-                    .GroupBy(word => word)
-                    .OrderByDescending(g => g.Count())
-                    .Take(10)
-                    .Select(g => g.Key)
-                    .ToList();
-
-                // 3. Sélectionner les phrases les plus pertinentes
-                var relevantSentences = keySentences
-                    .Where(sentence => 
-                        words.Any(word => sentence.ToLower().Contains(word)))
-                    .Take(8)
-                    .ToList();
-
-                // 4. Construire le résumé structuré
-                var summaryBuilder = new StringBuilder();
-                
-                // Introduction
-                summaryBuilder.AppendLine($"📰 **Résumé des actualités {categoryName}**");
-                summaryBuilder.AppendLine($"*Basé sur {articles.Count} articles de {sources.Count} sources*");
-                summaryBuilder.AppendLine();
-
-                // Thèmes principaux
-                if (words.Any())
-                {
-                    summaryBuilder.AppendLine("**🔥 Thèmes principaux :**");
-                    summaryBuilder.AppendLine(string.Join(", ", words.Select(w => char.ToUpper(w[0]) + w.Substring(1))));
-                    summaryBuilder.AppendLine();
-                }
-
-                // Résumé des articles
-                summaryBuilder.AppendLine("**📋 Points clés :**");
-                foreach (var sentence in relevantSentences.Take(6))
-                {
-                    summaryBuilder.AppendLine($"• {sentence}");
-                }
-
-                // Sources
-                if (sources.Any())
-                {
-                    summaryBuilder.AppendLine();
-                    summaryBuilder.AppendLine("**📡 Sources analysées :**");
-                    summaryBuilder.AppendLine(string.Join(", ", sources));
-                }
-
-                // Statistiques
-                summaryBuilder.AppendLine();
-                summaryBuilder.AppendLine($"*Généré le {DateTime.UtcNow:dd/MM/yyyy à HH:mm}*");
-
-                return summaryBuilder.ToString();
+                builder.AppendLine();
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error generating content summary");
-                return $"Résumé des actualités {categoryName} : Analyse de {articles.Count} articles récents. " +
-                       $"Les principaux sujets incluent les dernières développements dans ce secteur. " +
-                       $"Pour plus de détails, consultez les sources directement.";
-            }
+
+            return builder.ToString();
         }
 
         public async Task<ApiResponse<IEnumerable<SummaryResponseDto>>> GetRecentByUserAsync(int userId, int limit = 10)
@@ -412,12 +395,12 @@ namespace PulseWatch.Business.Services
                             var articles = feedContentResult.Data.Take(10); // Limiter à 10 articles par feed
                             foreach (var article in articles)
                             {
-                                if (!string.IsNullOrEmpty(article.Content) && article.Content.Length > 100)
+                                if (!string.IsNullOrWhiteSpace(article.Description))
                                 {
                                     articleContents.Add((
                                         article.Title,
-                                        article.Content,
-                                        article.Url,
+                                        article.Description,
+                                        article.Link,
                                         feed.Name
                                     ));
                                 }

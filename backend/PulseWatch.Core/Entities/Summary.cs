@@ -27,11 +27,11 @@ namespace PulseWatch.Core.Entities
 
         #region Foreign Keys
 
-        // Chaque Summary est lié à un Trend
-        public int TrendId { get; set; }
+        // Nullable : un digest de categorie n'est rattache a aucun trend.
+        public int? TrendId { get; set; }
 
         [ForeignKey(nameof(TrendId))]
-        public virtual Trend Trend { get; set; } = null!;
+        public virtual Trend? Trend { get; set; }
 
         // Optionnel : résumé généré pour un user particulier
         public int? UserId { get; set; }

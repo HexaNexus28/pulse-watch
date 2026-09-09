@@ -1,0 +1,17 @@
+# Loopback only. The single Nginx facade holds 80/443 on the VPS and proxies
+# this subdomain to 127.0.0.1:8087 - a workload never binds 80/443 itself.
+# Ports already taken on the box: 8000/8001 (Supabase Kong), 8085/8086
+# (EduSocialNews).
+services:
+  digest-agent:
+    build: .
+    image: pulsewatch/digest-agent:latest
+    restart: unless-stopped
+    env_file: digest_agent/.env
+    ports:
+      - "127.0.0.1:8087:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

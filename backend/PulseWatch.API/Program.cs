@@ -100,6 +100,21 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 
+// ========== AGENT DE DIGEST (service Python ADK, hors process) ==========
+// Typed client : l'URL vient de la configuration, jamais du code [R-02].
+// Timeout a 3 min et non les 100 s par defaut : l'agent enchaine plusieurs
+// appels LLM et rouvre les articles cites pour les verifier.
+builder.Services.AddHttpClient<IDigestGenerator, DigestAgentClient>(client =>
+{
+    var baseUrl = builder.Configuration["DigestAgent:BaseUrl"]
+        ?? throw new InvalidOperationException(
+            "DigestAgent:BaseUrl n'est pas configure. L'API refuse de demarrer "
+            + "plutot que d'echouer au premier digest.");
+
+    client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromMinutes(3);
+});
+
 // ========== AUTOMAPPER ==========
 // Dans Program.cs, remplacer par :
 builder.Services.AddAutoMapper(
