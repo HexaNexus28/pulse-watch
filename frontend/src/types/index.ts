@@ -65,9 +65,9 @@ export interface Trend {
     id: number;
     categoryId: number;
     score: number;
-    data: any; // JSON data
+    /** Mot-clé -> score normalisé entre 0 et 1, tel que le backend le persiste. */
+    data: Record<string, number>;
     generatedAt: string;
-    expiresAt: string;
     category?: Category;
 }
 

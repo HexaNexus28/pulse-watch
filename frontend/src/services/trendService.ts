@@ -8,7 +8,6 @@ export interface Trend {
   score: number;
   data: Record<string, number>;
   generatedAt: string;
-  expiresAt: string;
 }
 
 class TrendService {

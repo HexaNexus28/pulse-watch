@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { TrendingUp, BarChart3, Download, Calendar, RefreshCw, Eye, Activity, AlertTriangle, Trash2, Bot, Zap } from 'lucide-react';
+import { TrendingUp, BarChart3, Download, Calendar, RefreshCw, Eye, Activity, Trash2, Bot, Zap } from 'lucide-react';
 import { useTrends, useGenerateTrend, useCategories, useExportData } from '../hooks';
 import { useAutoSummary } from '../hooks/useAutoSummary';
 import { Trend } from '../services/trendService';
@@ -78,7 +78,6 @@ const Trends: React.FC = () => {
       categoryName: categories?.find(c => c.id === trend.categoryId)?.name,
       score: trend.score,
       generatedAt: trend.generatedAt,
-      expiresAt: trend.expiresAt,
       data: trend.data
     }));
 
@@ -104,54 +103,40 @@ const Trends: React.FC = () => {
     });
   };
 
-  const getTrendData = (trend: Trend) => {
+  interface TrendKeywords {
+    keywords: string[];
+    keywordScores: Record<string, number>;
+    analysisDate: string;
+  }
+
+  // `data` est la carte mot-clé -> score normalisé produite par TrendService.
+  // Rien d'autre n'est persisté : ni volume, ni croissance, ni sentiment. Une valeur
+  // affichée ici sans venir de la base serait une invention indiscernable d'une mesure.
+  const getTrendData = (trend: Trend): TrendKeywords => {
+    const empty: TrendKeywords = {
+      keywords: [],
+      keywordScores: {},
+      analysisDate: trend.generatedAt,
+    };
+
     try {
-      const data = typeof trend.data === 'string' ? JSON.parse(trend.data) : trend.data || {};
-      
-      // Handle the new enriched data structure from backend
-      if (data.keywords && Array.isArray(data.keywords)) {
-        return {
-          keywords: data.keywords,
-          keywordScores: data.keywordScores || {},
-          totalArticles: data.totalArticles || 0,
-          totalFeeds: data.totalFeeds || 0,
-          analysisDate: data.analysisDate || trend.generatedAt,
-          category: data.category || 'Unknown',
-          volume: data.totalArticles || Math.floor(Math.random() * 10000) + 1000,
-          growth: Math.floor(Math.random() * 40) - 10,
-          sources: [`${data.totalFeeds || 1} feeds`],
-          sentiment: 'positive',
-          ...data
-        };
-      }
-      
-      // Fallback for older data structure or mock data
+      const raw = typeof trend.data === 'string' ? JSON.parse(trend.data) : trend.data;
+      if (!raw || typeof raw !== 'object') return empty;
+
+      const keywordScores = Object.fromEntries(
+        Object.entries(raw as Record<string, unknown>)
+          .filter((entry): entry is [string, number] => typeof entry[1] === 'number')
+      );
+
       return {
-        keywords: data.keywords || ['AI', 'Machine Learning', 'Data Science', 'Analytics', 'Innovation'],
-        keywordScores: data.keywordScores || {},
-        totalArticles: data.totalArticles || 0,
-        totalFeeds: data.totalFeeds || 1,
-        analysisDate: data.analysisDate || trend.generatedAt,
-        category: data.category || 'Unknown',
-        volume: data.volume || 5000,
-        growth: data.growth || 15,
-        sources: data.sources || ['RSS Feeds'],
-        sentiment: data.sentiment || 'positive',
-        ...data
+        keywords: Object.keys(keywordScores).sort(
+          (a, b) => keywordScores[b] - keywordScores[a]
+        ),
+        keywordScores,
+        analysisDate: trend.generatedAt,
       };
     } catch {
-      return {
-        keywords: ['AI', 'Machine Learning', 'Data Science', 'Analytics', 'Innovation'],
-        keywordScores: {},
-        totalArticles: 0,
-        totalFeeds: 1,
-        analysisDate: new Date().toISOString(),
-        category: 'Unknown',
-        volume: 5000,
-        growth: 15,
-        sources: ['RSS Feeds'],
-        sentiment: 'positive'
-      };
+      return empty;
     }
   };
 
@@ -360,9 +345,9 @@ const Trends: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Trends</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Trends</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {filteredTrends.filter(trend => new Date(trend.expiresAt) > new Date()).length}
+                {filteredTrends.length}
               </p>
             </div>
             <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center">
@@ -400,16 +385,13 @@ const Trends: React.FC = () => {
             const data = getTrendData(trend);
             const scoreColor = getTrendScoreColor(trend.score);
             const scoreLabel = getTrendScoreLabel(trend.score);
-            const isExpired = new Date(trend.expiresAt) <= new Date();
             const hasSummary = trendsWithSummaries.has(trend.id);
             
             return (
               <div
                 key={trend.id}
                 className={`bg-white dark:bg-gray-800 rounded-lg border ${
-                  isExpired 
-                    ? 'border-gray-300 dark:border-gray-600 opacity-75' 
-                    : 'border-gray-200 dark:border-gray-700'
+                  'border-gray-200 dark:border-gray-700'
                 } shadow-sm hover:shadow-md transition-shadow p-6 relative`}
               >
                 {/* Summary Status Indicator */}
@@ -434,11 +416,6 @@ const Trends: React.FC = () => {
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${scoreColor}`}>
                       {scoreLabel}
                     </span>
-                    {isExpired && (
-                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                        Expired
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -483,44 +460,6 @@ const Trends: React.FC = () => {
                   </div>
                 )}
 
-                {/* Additional Trend Data */}
-                <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-                  {data.totalArticles > 0 && (
-                    <div>
-                      <span className="text-gray-500 dark:text-gray-400">Articles</span>
-                      <p className="font-semibold text-gray-900 dark:text-white">
-                        {data.totalArticles.toLocaleString()}
-                      </p>
-                    </div>
-                  )}
-                  {data.totalFeeds > 0 && (
-                    <div>
-                      <span className="text-gray-500 dark:text-gray-400">Feeds</span>
-                      <p className="font-semibold text-gray-900 dark:text-white">
-                        {data.totalFeeds}
-                      </p>
-                    </div>
-                  )}
-                  {data.volume && (
-                    <div>
-                      <span className="text-gray-500 dark:text-gray-400">Volume</span>
-                      <p className="font-semibold text-gray-900 dark:text-white">
-                        {data.volume.toLocaleString()}
-                      </p>
-                    </div>
-                  )}
-                  {data.growth && (
-                    <div>
-                      <span className="text-gray-500 dark:text-gray-400">Growth</span>
-                      <p className={`font-semibold ${
-                        data.growth > 0 ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        {data.growth > 0 ? '+' : ''}{data.growth}%
-                      </p>
-                    </div>
-                  )}
-                </div>
-
                 {/* Analysis Info */}
                 {data.analysisDate && (
                   <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-700">
@@ -531,11 +470,9 @@ const Trends: React.FC = () => {
                           Analyzed: {new Date(data.analysisDate).toLocaleDateString()}
                         </span>
                       </div>
-                      {data.category && (
-                        <span className="px-2 py-1 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded text-xs">
-                          {data.category}
-                        </span>
-                      )}
+                      <span className="px-2 py-1 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded text-xs">
+                        {categories?.find(c => c.id === trend.categoryId)?.name || 'Unknown Category'}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -544,10 +481,6 @@ const Trends: React.FC = () => {
                   <div className="flex items-center">
                     <Calendar className="w-4 h-4 mr-1" />
                     Generated: {formatDate(trend.generatedAt)}
-                  </div>
-                  <div className="flex items-center">
-                    <AlertTriangle className="w-4 h-4 mr-1" />
-                    Expires: {formatDate(trend.expiresAt)}
                   </div>
                 </div>
 
@@ -669,12 +602,6 @@ const Trends: React.FC = () => {
                   <span className="text-sm text-gray-500 dark:text-gray-400">Generated</span>
                   <p className="text-sm text-gray-900 dark:text-white">
                     {formatDate(viewingTrend.generatedAt)}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-500 dark:text-gray-400">Expires</span>
-                  <p className="text-sm text-gray-900 dark:text-white">
-                    {formatDate(viewingTrend.expiresAt)}
                   </p>
                 </div>
               </div>

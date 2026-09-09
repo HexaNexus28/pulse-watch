@@ -52,12 +52,14 @@ export default defineConfig({
                         handler: 'NetworkFirst',
                         options: {
                             cacheName: 'api-cache',
+                            // Workbox ne sait pas serialiser une fonction en mode generateSW :
+                            // un cacheKeyWillBeUsed ici faisait echouer le build sur une erreur
+                            // de validation illisible. Il etait de toute facon contre-productif,
+                            // en ajoutant un Date.now() a chaque cle donc en ne reutilisant
+                            // jamais une entree du cache.
                             expiration: {
                                 maxEntries: 10,
                                 maxAgeSeconds: 60 * 60 * 24 * 365 // <== 365 days
-                            },
-                            cacheKeyWillBeUsed: async ({ request }) => {
-                                return `${request.url}?version=${Date.now()}`
                             }
                         }
                     }

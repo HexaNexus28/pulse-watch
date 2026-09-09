@@ -31,7 +31,6 @@ export const useAutoSummary = (): UseAutoSummaryReturn => {
     const pendingTrendsCount = trends?.filter(trend =>
         !trendsWithSummaries.has(trend.id) &&
         !processedTrends.has(trend.id) &&
-        new Date(trend.expiresAt) > new Date() &&
         trend.score >= 50 // Only generate for trends with decent scores
     ).length || 0;
 
@@ -45,7 +44,6 @@ export const useAutoSummary = (): UseAutoSummaryReturn => {
             const trendsNeedingSummaries = trends.filter(trend =>
                 !trendsWithSummaries.has(trend.id) &&
                 !processedTrends.has(trend.id) &&
-                new Date(trend.expiresAt) > new Date() &&
                 trend.score >= 50
             );
 
