@@ -25,7 +25,8 @@ const PWAInstallPrompt: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 max-w-sm">
+    // Le positionnement appartient a la pile d'encarts de MainLayout.
+    <div className="pointer-events-auto w-full max-w-sm">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-4">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center space-x-2">

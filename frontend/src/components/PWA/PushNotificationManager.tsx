@@ -99,9 +99,10 @@ const PushNotificationManager: React.FC = () => {
   if (!isSupported) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 z-40">
+    // Le positionnement appartient a la pile d'encarts de MainLayout.
+    <div className="pointer-events-auto flex w-full max-w-sm flex-col items-end">
       {permission === 'default' && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-4 max-w-xs">
+        <div className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center space-x-3">
             <Bell className="w-5 h-5 text-blue-600" />
             <div className="flex-1">
