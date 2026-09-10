@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+tests/
+scripts/
+run_local.py
+run.log
+payload.json
+.env

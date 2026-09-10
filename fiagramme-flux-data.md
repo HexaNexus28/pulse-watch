@@ -34,7 +34,16 @@ TrendEngine
 ├─ calcule → HeatScore
 └─ renvoie → Trend
 
+DigestAgent (processus séparé, HTTP)
+├─ reçoit → Cleaned Articles (5 à 40)
+├─ regroupe → doublons écartés
+├─ rouvre → sources citées (vérification)
+└─ renvoie → Digest → Summary
+
 Trend
+└─ consulté par → User
+
+Summary
 └─ consulté par → User
 
 Note
@@ -42,6 +51,13 @@ Note
 
 ---
 
-## Pipeline synthèse :
+## Pipeline synthèse
 
-User → Category → Feed → FeedFetcher → TrendEngine → Trend → User → Note
+Analyse :
+User → Category → Feed → FeedFetcher → TrendEngine → Trend → User
+
+Digest :
+User → Category → Feed → FeedFetcher → DigestAgent → Summary → User
+
+Les deux pipelines partent des mêmes articles et ne se croisent pas : un digest
+de catégorie ne dépend d'aucun Trend.

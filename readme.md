@@ -1,65 +1,82 @@
 # PulseWatch – Tech Intelligence Dashboard
 
-**PulseWatch** est une application **SaaS moderne** qui transforme la veille technologique en **flux d'information analysé, synthétisé et personnalisable par l'utilisateur**.  
-Chaque utilisateur peut créer ses propres catégories et suivre les tendances spécifiques à ses domaines d'intérêt, avec un résumé quotidien automatique.
+**PulseWatch** est une application **SaaS moderne** qui transforme la veille technologique en **flux d'information analysé, synthétisé et personnalisable par l'utilisateur**.
+Chaque utilisateur peut créer ses propres catégories et suivre les tendances spécifiques à ses domaines d'intérêt, avec un digest quotidien produit par un agent IA.
+
+> Pour installer, lancer et dépanner le projet, voir **[GUIDE.md](GUIDE.md)**.
+> Ce fichier décrit *ce qu'est* PulseWatch ; le guide décrit *comment le faire tourner*.
 
 ---
 
 ## 📡 Fonctionnalités
 
 - **Collecte automatique de flux RSS** : IA, DevOps, Node.js, C#, cybersécurité…
-- **Analyse des tendances** : TF-IDF, clustering, scoring par catégorie.
-- **Résumé quotidien** : digest clair et actionnable par catégorie.
-- **Gestion des notes** : CRUD, tagging et recherche full-text.
-- **Multi-catégories personnalisables** : chaque utilisateur peut ajouter ses domaines et suivre l'évolution.
-- **Interface PWA moderne** : responsive, dark mode, installation possible.
-- **Backend scalable et robuste** : C# ASP.NET Core, Docker-ready.
-- **Frontend React TypeScript** : architecture moderne avec hooks et context.
+- **Analyse des tendances** : TF-IDF, scoring par catégorie.
+- **Digest quotidien** : produit par un agent ADK hors process, qui déduplique les
+  sujets et vérifie chaque affirmation contre les sources avant de publier.
+- **Gestion des notes** : CRUD, tagging et recherche.
+- **Multi-catégories personnalisables** : chaque utilisateur ajoute ses domaines.
+- **Interface PWA** : responsive, dark mode, installation possible.
+- **Backend en 4 couches** : C# ASP.NET Core.
 
 ---
 
 ## ⚙️ Stack Technique
 
-| Composant       | Choix                                                   |
-| --------------- | ------------------------------------------------------- |
-| Frontend        | React 19 + TypeScript + Vite + Tailwind CSS              |
-| Backend         | C# ASP.NET Core (4 couches : Core, Data, Business, API) |
-| Base de données | SQLite (début), SQL Server/PostgreSQL pour scale        |
-| PWA             | Service Worker, Manifest, Offline Support                 |
-| RSS Engine      | Custom service + background service                      |
-| Déploiement     | Docker + PaaS ou VPS                                    |
+| Composant | Choix |
+| --------- | ----- |
+| Frontend | React 19 + TypeScript + Vite + Tailwind CSS |
+| Backend | C# ASP.NET Core, .NET 9 (4 couches : Core, Data, Business, API) |
+| Base de données | SQL Server — LocalDB en développement, migrations EF Core |
+| Agent de digest | Python 3.11+, Google ADK, FastAPI (processus séparé) |
+| Authentification | JWT (HS256), clé fournie par la configuration |
+| PWA | `vite-plugin-pwa` (Service Worker, manifest) |
+| RSS | `SyndicationFeed` (System.ServiceModel.Syndication) |
 
 ---
 
-## 🏗️ Architecture du Projet
+## 🏗️ Architecture
+
+Trois processus, deux dépôts de code, un seul propriétaire du schéma.
+
+```
+┌─────────────┐   HTTP /api   ┌──────────────────┐  HTTP /digest  ┌───────────────┐
+│  frontend   │ ────────────► │  PulseWatch.API  │ ─────────────► │  agent/       │
+│ React+Vite  │ ◄──────────── │  ASP.NET Core    │ ◄───────────── │ FastAPI + ADK │
+│  :3000      │               │  :5000 / :7171   │    Digest      │  :8087        │
+└─────────────┘               └────────┬─────────┘                └───────┬───────┘
+                                       │ EF Core                          │ HTTP
+                                       ▼                                  ▼
+                                 ┌───────────┐                      flux RSS publics
+                                 │ SQL Server│                      (lecture d'articles)
+                                 └───────────┘
+```
+
+L'agent ne touche jamais la base : il reçoit des articles, il rend un digest.
+Le backend reste seul propriétaire du schéma.
 
 ```
 pulse-watch/
-├── backend/                    # Backend C# ASP.NET Core
-│   ├── PulseWatch.API/        # API Controllers
-│   ├── PulseWatch.Business/    # Business Logic
-│   ├── PulseWatch.Core/       # Entities & Interfaces
-│   └── PulseWatch.Data/       # Data Access Layer
-├── frontend/                   # Frontend React TypeScript
-│   ├── src/
-│   │   ├── components/        # Composants réutilisables
-│   │   ├── context/          # React Context (Auth, etc.)
-│   │   ├── hooks/            # Hooks personnalisés
-│   │   ├── pages/            # Pages de l'application
-│   │   ├── styles/           # CSS et styles
-│   │   ├── types/            # Types TypeScript
-│   │   ├── utils/            # Utilitaires
-│   │   └── config/           # Configuration API
-│   ├── public/               # Fichiers statiques PWA
-│   └── server.js            # Serveur Express pour production
-└── docs/                     # Documentation
+├── backend/
+│   ├── PulseWatch.Core/       # Entités, DTOs, interfaces, profils AutoMapper
+│   ├── PulseWatch.Data/       # DbContext, repositories, UnitOfWork
+│   ├── PulseWatch.Business/   # Services métier + client HTTP de l'agent
+│   └── PulseWatch.API/        # Controllers, Program.cs, migrations EF
+├── agent/                     # Agent de digest (Python, ADK, FastAPI)
+│   ├── digest_agent/          # agent.py, service.py, tools.py, schemas.py
+│   ├── tests/                 # pytest
+│   ├── Dockerfile             # + docker-compose.yml
+│   └── README.md              # le graphe et les décisions de conception
+├── frontend/
+│   └── src/                   # components, context, hooks, pages, services
+├── GUIDE.md                   # installation, exécution, dépannage
+├── DATABASE_SCHEMA.md
+└── readme.md
 ```
 
 ---
 
 ## 🧩 Modèle de Données
-
-### Entités Principales
 
 ```mermaid
 classDiagram
@@ -69,8 +86,6 @@ classDiagram
         +string Email
         +string PasswordHash
         +DateTime CreatedAt
-        +AddCategory()
-        +AddNote()
     }
 
     class Category {
@@ -78,8 +93,6 @@ classDiagram
         +string Name
         +int? UserId
         +DateTime CreatedAt
-        +AddFeed()
-        +GetTrends()
     }
 
     class Feed {
@@ -87,7 +100,6 @@ classDiagram
         +string URL
         +int CategoryId
         +DateTime CreatedAt
-        +FetchItems()
     }
 
     class Note {
@@ -96,200 +108,158 @@ classDiagram
         +string Content
         +int CategoryId
         +int UserId
-        +DateTime CreatedAt
-        +Edit()
-        +Delete()
     }
 
     class Trend {
         +int Id
         +int CategoryId
-        +JSON Data
+        +Dictionary~string,double~ Data
         +DateTime GeneratedAt
-        +Calculate()
     }
-class Summary  {
+
+    class Summary {
         +int Id
         +string Title
         +string Content
-        +DateTime CreatedAt
-        +GenerateSummary()
+        +int? TrendId
+        +int? CategoryId
+        +int? UserId
+        +DateTime GeneratedAt
     }
 
     User "1" --> "*" Category : owns
-    Trend  "1" --> "*" Summary : contains
     User "1" --> "*" Summary : owns
     Category "1" --> "*" Feed : contains
     Category "1" --> "*" Note : contains
     Category "1" --> "*" Trend : contains
+    Category "1" --> "*" Summary : covers
+    Trend "1" --> "*" Summary : may source
 ```
+
+`Summary.TrendId` et `Summary.CategoryId` sont tous deux nullables : un digest de
+catégorie n'est rattaché à aucun trend, et les lignes antérieures à `CategoryId`
+n'ont que leur trend. Détail dans [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md).
 
 ---
 
-## 🚀 Installation & Démarrage Rapide
+## 🚀 Démarrage
 
-### Prérequis
-
-- Node.js 18+
-- .NET 8.0+
-- Docker (optionnel)
-
-### Backend
+Le détail — prérequis, configuration, dépannage — est dans **[GUIDE.md](GUIDE.md)**.
+En résumé, trois processus à lancer :
 
 ```bash
-# Cloner le projet
-git clone https://github.com/HexaNexus28/pulse-watch.git
-cd pulse-watch/backend
+# 1. API  (une clé JWT est obligatoire : sans elle l'API refuse de démarrer)
+cd backend/PulseWatch.API
+Jwt__Key="$(openssl rand -base64 48)" dotnet run
 
-# Restaurer les dépendances
-dotnet restore
+# 2. Agent de digest
+cd agent && docker compose up -d          # ou : uvicorn digest_agent.service:app --port 8087
 
-# Lancer l'API
-cd PulseWatch.API
-dotnet run
+# 3. Frontend
+cd frontend && npm install && npm run dev
 ```
-
-L'API sera disponible sur `https://localhost:7171`
-
-### Frontend
-
-```bash
-# Aller dans le dossier frontend
-cd ../frontend
-
-# Installer les dépendances
-npm install
-
-# Copier les variables d'environnement
-cp .env.example .env
-
-# Lancer le serveur de développement
-npm run dev
-```
-
-L'application sera disponible sur `http://localhost:3000`
-
-### Production avec Docker
-
-```bash
-# Construire les images
-docker-compose build
-
-# Lancer les services
-docker-compose up -d
-```
-
----
-
-## 📱 Fonctionnalités PWA
-
-L'application est une **Progressive Web App** avec :
-
-- **Installation** : Possible d'installer sur desktop et mobile
-- **Offline Support** : Fonctionnalités de base disponibles hors ligne
-- **Notifications Push** : Alertes pour nouvelles tendances
-- **Background Sync** : Synchronisation des données lors de la reconnexion
-- **Responsive Design** : Adapté à tous les écrans
 
 ---
 
 ## 🔧 Configuration
 
-### Variables d'Environnement
-
-#### Backend (.env)
-```env
-ConnectionStrings__DefaultConnection=Data Source=pulsewatch.db
-JWT__Secret=votre-secret-key
-JWT__Expiration=3600
-RSS__UpdateInterval=3600
-```
-
-#### Frontend (.env)
-```env
-VITE_API_URL=https://localhost:7171/api
-VITE_ENABLE_PWA=true
-VITE_ENABLE_DEBUG=false
-```
-
----
-
-## 🛠️ Scripts Disponibles
+Aucun secret n'est versionné : `appsettings.json` n'en contient plus, et les
+`.env` sont ignorés par git. Le double souligné correspond à l'imbrication .NET
+(`Jwt__Key` → section `Jwt`, clé `Key`).
 
 ### Backend
-```bash
-dotnet run                    # Lancer l'API
-dotnet build                  # Compiler le projet
-dotnet test                   # Lancer les tests
-dotnet ef database update     # Migrer la base de données
-```
+
+| Variable | Obligatoire | Rôle |
+| --- | --- | --- |
+| `ConnectionStrings__DefaultConnection` | oui | chaîne de connexion SQL Server |
+| `Jwt__Key` | **oui** | signature des jetons, 32 caractères minimum |
+| `Jwt__Issuer` / `Jwt__Audience` | non | `PulseWatch` par défaut |
+| `DigestAgent__BaseUrl` | **oui** | URL de l'agent, ex. `http://127.0.0.1:8087` |
+| `Cors__AllowedOrigins__0` | en prod | origines autorisées, une par index |
+
+L'API refuse de démarrer si `Jwt__Key` ou `DigestAgent__BaseUrl` manquent —
+plutôt que d'échouer au premier appel, ou de signer avec une clé connue.
+
+### Agent
+
+Voir `agent/.env.example`. Le modèle se choisit par `DIGEST_MODEL` (Gemini natif,
+ou tout provider via LiteLLM).
 
 ### Frontend
-```bash
-npm run dev                   # Serveur de développement
-npm run build                 # Build de production
-npm run serve                 # Serveur Express (production)
-npm run lint                  # ESLint
-npm run type-check            # Vérification TypeScript
-```
+
+Voir `frontend/.env.example`. En développement, `VITE_API_URL=/api` passe par le
+proxy Vite et évite toute question de CORS.
 
 ---
 
-## 📊 API Endpoints
+## 📊 API
+
+Toutes les routes sont sous `/api`, et toutes exigent un jeton sauf `/api/Auth/*`.
 
 ### Authentication
-- `POST /api/auth/login` - Connexion
-- `POST /api/auth/register` - Inscription
-- `GET /api/auth/profile` - Profil utilisateur
+- `POST /api/Auth/register` · `POST /api/Auth/login`
+- `POST /api/Auth/refresh` · `POST /api/Auth/logout` · `POST /api/Auth/validate`
 
 ### Categories
-- `GET /api/categories` - Lister les catégories
-- `POST /api/categories` - Créer une catégorie
-- `PUT /api/categories/{id}` - Mettre à jour
-- `DELETE /api/categories/{id}` - Supprimer
+- `GET|POST /api/Category` · `GET|PUT|DELETE /api/Category/{id}`
+- `GET /api/Category/{id}/feeds` · `/notes` · `/trends`
 
 ### Feeds
-- `GET /api/feeds` - Lister les flux RSS
-- `POST /api/feeds` - Ajouter un flux
-- `POST /api/feeds/{id}/fetch` - Récupérer les articles
+- `GET|POST /api/Feed` · `GET|DELETE /api/Feed/{id}`
+- `GET /api/Feed/{id}/fetch` — lit et parse le flux
+- `GET /api/Feed/category/{categoryId}`
 
 ### Notes
-- `GET /api/notes` - Lister les notes
-- `POST /api/notes` - Créer une note
-- `PUT /api/notes/{id}` - Mettre à jour
-- `DELETE /api/notes/{id}` - Supprimer
+- `GET|POST /api/Note` · `GET|PUT|DELETE /api/Note/{id}`
 
-### Trends & Summaries
-- `GET /api/trends` - Analyse des tendances
-- `GET /api/summaries` - Résumés quotidiens
-- `POST /api/summaries/generate` - Générer un résumé
+### Trends
+- `GET /api/Trend` · `GET /api/Trend/{id}`
+- `GET /api/Trend/category/{categoryId}` · `/latest`
+- `POST /api/Trend/category/{categoryId}/generate`
+
+### Summaries
+- `GET /api/Summary` · `GET /api/Summary/{id}` · `GET /api/Summary/daily`
+- `GET /api/Summary/user/{userId}` · `GET /api/Summary/category/{categoryId}`
+- `POST /api/Summary/category/{categoryId}/generate` — digest de catégorie
+- `POST /api/Summary/trend/{trendId}/generate` — digest à partir d'un trend
+
+### Dashboard
+- `GET /api/Dashboard/stats` · `/activity` · `/categories`
+
+### Users
+- `GET /api/User` · `GET|PUT|DELETE /api/User/{id}`
+- `POST /api/User/{id}/change-password`
+- `GET /api/User/check-email/{email}` · `/check-username/{username}`
+
+Swagger est servi à la racine de l'API en développement.
+
+---
+
+## 📱 PWA
+
+Service Worker et manifest via `vite-plugin-pwa` : installation sur desktop et
+mobile, écran hors ligne, mise en cache des assets.
 
 ---
 
 ## 🎯 Roadmap
 
-### Version 1.0.0 
-- [x] Architecture de base
+### Version 1.0.0
+- [x] Architecture 4 couches
 - [x] Authentification JWT
-- [x] CRUD Categories/Feeds/Notes
+- [x] CRUD Categories / Feeds / Notes
 - [x] Frontend React TypeScript
 - [x] Interface PWA responsive
 
-### Version 1.1.0 (En cours)
-- [ ] Analyse TF-IDF des tendances
-- [ ] Génération automatique de résumés
+### Version 1.1.0 (en cours)
+- [x] Analyse TF-IDF des tendances
+- [x] Digest quotidien par agent ADK (déduplication + vérification des sources)
+- [ ] Rendu Markdown des digests dans l'interface
 - [ ] Notifications push
 - [ ] Mode dark complet
 
-### Version 2.0.0 (Planifié)
-- [ ] Multi-tenant SaaS
-- [ ] Dashboard analytique avancé
-- [ ] API publique pour partenaires
-- [ ] Plugin system
-- [ ] Mobile app native
-
+La suite reste à définir.
 
 ---
 
-
-**PulseWatch** - Votre veille technologique, intelligente et automatisée. 
+**PulseWatch** — Votre veille technologique, intelligente et automatisée.

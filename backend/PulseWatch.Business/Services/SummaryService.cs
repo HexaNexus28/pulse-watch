@@ -1,6 +1,7 @@
 ﻿using AutoMapper;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using PulseWatch.Core.Dtos.Request;
 using PulseWatch.Core.Dtos.Response;
 using PulseWatch.Core.Entities;
 using PulseWatch.Core.Interfaces.Repositories;
@@ -19,13 +20,21 @@ namespace PulseWatch.Business.Services
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
         private readonly ILogger<SummaryService> _logger;
+        private readonly IFeedService _feedService;
+        private readonly IDigestGenerator _digestGenerator;
 
-        public SummaryService(IUnitOfWork unitOfWork, IMapper mapper, ILogger<SummaryService> logger)
+        public SummaryService(
+            IUnitOfWork unitOfWork,
+            IMapper mapper,
+            ILogger<SummaryService> logger,
+            IFeedService feedService,
+            IDigestGenerator digestGenerator)
         {
-
             _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _feedService = feedService ?? throw new ArgumentNullException(nameof(feedService));
+            _digestGenerator = digestGenerator ?? throw new ArgumentNullException(nameof(digestGenerator));
         }
 
 
@@ -125,10 +134,12 @@ namespace PulseWatch.Business.Services
                         $"Summary with ID {id} not found");
                 }
 
-                // Soft delete
-                Summary = null;
-
-                _unitOfWork.Summaries.Update(Summary);
+                // Suppression franche : Summary ne porte aucune colonne d'etat
+                // (pas d'IsDeleted, pas de DeletedAt), il n'y a donc rien a
+                // marquer. Le code precedent affectait null a la variable locale
+                // puis passait ce null a Update() — ArgumentNullException a tous
+                // les coups, jamais une suppression.
+                _unitOfWork.Summaries.Remove(Summary);
                 await _unitOfWork.SaveChangesAsync();
 
 
@@ -156,38 +167,10 @@ namespace PulseWatch.Business.Services
                 return ApiResponse<SummaryResponseDto>.ErrorResponse("No feeds found for this category");
 
             // 3. Récupérer le contenu des articles RSS
-            var articleContents = new List<(string Title, string Content, string Url, string Source)>();
-            
-            foreach (var feed in feeds)
-            {
-                try
-                {
-                    var feedContentResult = await _feedService.FetchFeedContentAsync(feed.Id);
-                    if (feedContentResult.Success && feedContentResult.Data != null)
-                    {
-                        var articles = feedContentResult.Data.Take(10); // Limiter à 10 articles par feed
-                        foreach (var article in articles)
-                        {
-                            if (!string.IsNullOrEmpty(article.Content) && article.Content.Length > 100)
-                            {
-                                articleContents.Add((
-                                    article.Title,
-                                    article.Content,
-                                    article.Url,
-                                    feed.Name
-                                ));
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to fetch content for feed {FeedId}", feed.Id);
-                }
-            }
+            var articleContents = await CollectArticlesAsync(feeds);
 
-            if (!articleContents.Any())
-                return ApiResponse<SummaryResponseDto>.ErrorResponse("No article content found for summary generation");
+            if (articleContents.Count < MinArticlesForDigest)
+                return ApiResponse<SummaryResponseDto>.ErrorResponse(NotEnoughArticlesMessage(articleContents.Count), 422);
 
             // 4. Générer un résumé basé sur le contenu réel des articles
             var summaryContent = await GenerateContentSummaryAsync(articleContents, trend.Category.Name);
@@ -199,6 +182,9 @@ namespace PulseWatch.Business.Services
             var summary = new Summary
             {
                 TrendId = trendId,
+                // Renseignee aussi sur ce chemin : la categorie se lit alors de la
+                // meme facon quelle que soit l'origine du resume.
+                CategoryId = trend.CategoryId,
                 Title = $"Actualités {trend.Category.Name} : {DateTime.UtcNow:dd/MM/yyyy}",
                 Content = summaryContent,
                 GeneratedAt = DateTime.UtcNow,
@@ -226,92 +212,152 @@ namespace PulseWatch.Business.Services
             return ApiResponse<SummaryResponseDto>.SuccessResponse(responseDto, "Summary generated successfully");
         }
 
-        private async Task<string> GenerateContentSummaryAsync(List<(string Title, string Content, string Url, string Source)> articles, string categoryName)
+        /// <summary>
+        /// Fenetre d'articles acceptee par l'agent : DigestRequest, dans
+        /// agent/digest_agent/service.py, declare articles avec min_length=5 et
+        /// max_length=40. Sous le plancher il n'y a rien a dedupliquer, au-dessus
+        /// du plafond le contexte du curateur explose.
+        /// </summary>
+        /// <remarks>
+        /// Ces bornes sont validees par l'agent, qui repond 422 quand elles ne
+        /// sont pas tenues. Les faire respecter ici est ce qui distingue un
+        /// message metier lisible d'un 500 opaque : une categorie a 4 articles,
+        /// ou 5 flux rendant 10 articles chacun, sont deux situations ordinaires.
+        ///
+        /// Elles sont dupliquees des deux cotes de HTTP faute d'un schema
+        /// partage. Toute modification de DigestRequest doit passer ici.
+        /// </remarks>
+        private const int MinArticlesForDigest = 5;
+        private const int MaxArticlesForDigest = 40;
+
+        /// <summary>Nombre d'articles lus par flux, plafonne comme avant a 10.</summary>
+        private const int MaxArticlesPerFeed = 10;
+
+        private static string NotEnoughArticlesMessage(int found) =>
+            $"Not enough article content to generate a digest: {found} article(s) available, "
+            + $"{MinArticlesForDigest} required. Add feeds to this category, or wait for new articles.";
+
+        /// <summary>
+        /// Rassemble les articles des flux d'une categorie, dans la fenetre que
+        /// l'agent accepte.
+        /// </summary>
+        /// <remarks>
+        /// Le plafond est reparti entre les flux plutot qu'applique par une
+        /// troncature finale : tronquer ferait disparaitre les derniers flux
+        /// entierement, et le digest presenterait une categorie en n'ayant lu
+        /// qu'une partie de ses sources sans que rien ne le signale.
+        ///
+        /// Un flux injoignable est journalise et saute : perdre une source ne
+        /// doit pas faire perdre les autres.
+        /// </remarks>
+        private async Task<List<(string Title, string Content, string Url, string Source)>> CollectArticlesAsync(
+            IEnumerable<Feed> feeds)
         {
-            try
+            var feedList = feeds.ToList();
+            var articles = new List<(string Title, string Content, string Url, string Source)>();
+
+            var perFeed = Math.Clamp(MaxArticlesForDigest / Math.Max(1, feedList.Count), 1, MaxArticlesPerFeed);
+
+            foreach (var feed in feedList)
             {
-                // 1. Extraire les phrases clés de chaque article
-                var keySentences = new List<string>();
-                var sources = new HashSet<string>();
-                
-                foreach (var article in articles)
+                try
                 {
-                    sources.Add(article.Source);
-                    
-                    // Nettoyer et diviser le contenu en phrases
-                    var sentences = article.Content
-                        .Split(new[] { '.', '!', '?', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Where(s => s.Trim().Length > 20) // Ignorer les phrases trop courtes
-                        .Select(s => s.Trim())
-                        .Take(5) // Prendre les 5 premières phrases par article
-                        .ToList();
-                    
-                    keySentences.AddRange(sentences);
+                    var feedContentResult = await _feedService.FetchFeedContentAsync(feed.Id);
+                    if (feedContentResult.Success && feedContentResult.Data != null)
+                    {
+                        foreach (var article in feedContentResult.Data.Take(perFeed))
+                        {
+                            if (!string.IsNullOrWhiteSpace(article.Description))
+                            {
+                                articles.Add((
+                                    article.Title,
+                                    article.Description,
+                                    article.Link,
+                                    feed.Name
+                                ));
+                            }
+                        }
+                    }
                 }
-
-                // 2. Identifier les thèmes principaux par analyse de fréquence
-                var allText = string.Join(" ", keySentences).ToLower();
-                var words = allText
-                    .Split(new[] { ' ', ',', '.', ';', '!', '?', '-', '_', '(', ')', '"', '\'' }, 
-                           StringSplitOptions.RemoveEmptyEntries)
-                    .Where(word => word.Length > 4 && !_stopWords.Contains(word))
-                    .GroupBy(word => word)
-                    .OrderByDescending(g => g.Count())
-                    .Take(10)
-                    .Select(g => g.Key)
-                    .ToList();
-
-                // 3. Sélectionner les phrases les plus pertinentes
-                var relevantSentences = keySentences
-                    .Where(sentence => 
-                        words.Any(word => sentence.ToLower().Contains(word)))
-                    .Take(8)
-                    .ToList();
-
-                // 4. Construire le résumé structuré
-                var summaryBuilder = new StringBuilder();
-                
-                // Introduction
-                summaryBuilder.AppendLine($"📰 **Résumé des actualités {categoryName}**");
-                summaryBuilder.AppendLine($"*Basé sur {articles.Count} articles de {sources.Count} sources*");
-                summaryBuilder.AppendLine();
-
-                // Thèmes principaux
-                if (words.Any())
+                catch (Exception ex)
                 {
-                    summaryBuilder.AppendLine("**🔥 Thèmes principaux :**");
-                    summaryBuilder.AppendLine(string.Join(", ", words.Select(w => char.ToUpper(w[0]) + w.Substring(1))));
-                    summaryBuilder.AppendLine();
+                    _logger.LogWarning(ex, "Failed to fetch content for feed {FeedId}", feed.Id);
                 }
-
-                // Résumé des articles
-                summaryBuilder.AppendLine("**📋 Points clés :**");
-                foreach (var sentence in relevantSentences.Take(6))
-                {
-                    summaryBuilder.AppendLine($"• {sentence}");
-                }
-
-                // Sources
-                if (sources.Any())
-                {
-                    summaryBuilder.AppendLine();
-                    summaryBuilder.AppendLine("**📡 Sources analysées :**");
-                    summaryBuilder.AppendLine(string.Join(", ", sources));
-                }
-
-                // Statistiques
-                summaryBuilder.AppendLine();
-                summaryBuilder.AppendLine($"*Généré le {DateTime.UtcNow:dd/MM/yyyy à HH:mm}*");
-
-                return summaryBuilder.ToString();
             }
-            catch (Exception ex)
+
+            // perFeed * nombre de flux peut depasser le plafond quand la division
+            // ne tombe pas juste (41 flux a 1 article, par exemple).
+            if (articles.Count > MaxArticlesForDigest)
             {
-                _logger.LogError(ex, "Error generating content summary");
-                return $"Résumé des actualités {categoryName} : Analyse de {articles.Count} articles récents. " +
-                       $"Les principaux sujets incluent les dernières développements dans ce secteur. " +
-                       $"Pour plus de détails, consultez les sources directement.";
+                _logger.LogInformation(
+                    "Digest input capped at {Max} articles out of {Total} collected",
+                    MaxArticlesForDigest, articles.Count);
+                articles = articles.Take(MaxArticlesForDigest).ToList();
             }
+
+            return articles;
+        }
+
+        /// <summary>
+        /// Envoie les articles a l'agent ADK et rend le digest en markdown.
+        /// </summary>
+        /// <remarks>
+        /// Remplace l'ancien GenerateContentSummaryAsync, qui n'etait pas un
+        /// resume : il decoupait chaque article en phrases, comptait les mots de
+        /// plus de 4 lettres et recollait 6 phrases brutes. Aucune synthese,
+        /// aucune deduplication, aucune verification des sources.
+        ///
+        /// Pas de repli silencieux vers l'ancien comportement en cas de panne de
+        /// l'agent : un faux resume rendu sans erreur masquerait la panne pendant
+        /// des semaines. L'exception remonte et l'appelant repond en erreur.
+        /// </remarks>
+        private async Task<string> GenerateContentSummaryAsync(
+            List<(string Title, string Content, string Url, string Source)> articles,
+            string categoryName,
+            CancellationToken cancellationToken = default)
+        {
+            var payload = articles
+                .Select(a => new DigestArticleDto
+                {
+                    Title = a.Title,
+                    Excerpt = a.Content,
+                    Url = a.Url,
+                    Source = a.Source,
+                })
+                .ToList();
+
+            var digest = await _digestGenerator.GenerateAsync(categoryName, payload, cancellationToken);
+
+            _logger.LogInformation(
+                "Digest agent kept {Kept} stories out of {Total} articles for {Category}",
+                digest.Items.Count, articles.Count, categoryName);
+
+            return RenderDigest(digest, articles.Count);
+        }
+
+        /// <summary>
+        /// Markdown stocke dans Summary.Content. Le rendu vit ici et non dans
+        /// l'agent : l'agent renvoie une structure, la mise en forme est une
+        /// decision de presentation qui appartient a l'application.
+        /// </summary>
+        private static string RenderDigest(DigestDto digest, int articleCount)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine($"**{digest.Category}** - {digest.Items.Count} sujets retenus sur {articleCount} articles ({digest.DroppedCount} ecartes)");
+            builder.AppendLine();
+
+            foreach (var item in digest.Items)
+            {
+                builder.AppendLine($"### {item.Headline}");
+                builder.AppendLine(item.WhyItMatters);
+                foreach (var source in item.Sources)
+                {
+                    builder.AppendLine($"- {source}");
+                }
+                builder.AppendLine();
+            }
+
+            return builder.ToString();
         }
 
         public async Task<ApiResponse<IEnumerable<SummaryResponseDto>>> GetRecentByUserAsync(int userId, int limit = 10)
@@ -371,8 +417,14 @@ namespace PulseWatch.Business.Services
             
             try
             {
-                // Récupérer les summaries dont les trends sont liés à cette catégorie
-                var summaries = await _unitOfWork.Summaries.FindAsync(s => s.Trend.CategoryId == categoryId);
+                // Les deux rattachements comptent : CategoryId pour les resumes qui
+                // le portent, le trend pour les lignes anterieures a cette colonne.
+                // Filtrer sur le seul s.Trend.CategoryId excluait tous les digests
+                // de categorie, dont le TrendId est null — c'est-a-dire exactement
+                // ceux que cet endpoint doit rendre.
+                var summaries = await _unitOfWork.Summaries.FindAsync(
+                    s => s.CategoryId == categoryId
+                         || (s.CategoryId == null && s.Trend != null && s.Trend.CategoryId == categoryId));
                 var summaryDtos = _mapper.Map<IEnumerable<SummaryResponseDto>>(summaries);
                 return ApiResponse<IEnumerable<SummaryResponseDto>>.SuccessResponse(summaryDtos, "Category summaries retrieved successfully");
             }
@@ -400,38 +452,10 @@ namespace PulseWatch.Business.Services
                     return ApiResponse<SummaryResponseDto>.ErrorResponse("No feeds found for this category", 404);
 
                 // 3. Récupérer le contenu des articles RSS (même logique que GenerateSummaryAsync)
-                var articleContents = new List<(string Title, string Content, string Url, string Source)>();
-                
-                foreach (var feed in feeds)
-                {
-                    try
-                    {
-                        var feedContentResult = await _feedService.FetchFeedContentAsync(feed.Id);
-                        if (feedContentResult.Success && feedContentResult.Data != null)
-                        {
-                            var articles = feedContentResult.Data.Take(10); // Limiter à 10 articles par feed
-                            foreach (var article in articles)
-                            {
-                                if (!string.IsNullOrEmpty(article.Content) && article.Content.Length > 100)
-                                {
-                                    articleContents.Add((
-                                        article.Title,
-                                        article.Content,
-                                        article.Url,
-                                        feed.Name
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to fetch content for feed {FeedId}", feed.Id);
-                    }
-                }
+                var articleContents = await CollectArticlesAsync(feeds);
 
-                if (!articleContents.Any())
-                    return ApiResponse<SummaryResponseDto>.ErrorResponse("No article content found for summary generation", 404);
+                if (articleContents.Count < MinArticlesForDigest)
+                    return ApiResponse<SummaryResponseDto>.ErrorResponse(NotEnoughArticlesMessage(articleContents.Count), 422);
 
                 // 4. Générer un résumé basé sur le contenu réel des articles
                 var summaryContent = await GenerateContentSummaryAsync(articleContents, category.Name);
@@ -446,7 +470,8 @@ namespace PulseWatch.Business.Services
                     Content = summaryContent,
                     GeneratedAt = DateTime.UtcNow,
                     UserId = userId,
-                    TrendId = null // Pas lié à un trend spécifique, mais à la catégorie
+                    TrendId = null, // Pas lié à un trend spécifique, mais à la catégorie
+                    CategoryId = categoryId
                 };
 
                 await _unitOfWork.Summaries.AddAsync(summary);

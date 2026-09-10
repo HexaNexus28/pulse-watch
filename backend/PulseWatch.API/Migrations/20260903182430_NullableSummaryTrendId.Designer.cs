@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PulseWatch.Data.Context;
 
@@ -11,9 +12,11 @@ using PulseWatch.Data.Context;
 namespace PulseWatch.API.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260903182430_NullableSummaryTrendId")]
+    partial class NullableSummaryTrendId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -54,31 +57,31 @@ namespace PulseWatch.API.Migrations
                         new
                         {
                             Id = 1,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(478),
                             Name = "Tech News"
                         },
                         new
                         {
                             Id = 2,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(664),
                             Name = "Artificial Intelligence"
                         },
                         new
                         {
                             Id = 3,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(666),
                             Name = "C# / .NET"
                         },
                         new
                         {
                             Id = 4,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(667),
                             Name = "JavaScript & Web"
                         },
                         new
                         {
                             Id = 5,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(668),
                             Name = "Cybersecurity"
                         });
                 });
@@ -126,7 +129,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 1,
                             CategoryId = 1,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4461),
                             IsActive = true,
                             Name = "Hacker News Frontpage",
                             URL = "https://hnrss.org/frontpage"
@@ -135,7 +138,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 2,
                             CategoryId = 1,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4713),
                             IsActive = true,
                             Name = "The Verge",
                             URL = "https://www.theverge.com/rss/index.xml"
@@ -144,7 +147,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 3,
                             CategoryId = 1,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4714),
                             IsActive = true,
                             Name = "MIT Technology Review",
                             URL = "https://www.technologyreview.com/topnews.rss"
@@ -153,7 +156,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 4,
                             CategoryId = 2,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4716),
                             IsActive = true,
                             Name = "Reddit Machine Learning",
                             URL = "https://www.reddit.com/r/MachineLearning/.rss"
@@ -162,7 +165,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 5,
                             CategoryId = 2,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4717),
                             IsActive = true,
                             Name = "Google AI Blog",
                             URL = "https://ai.googleblog.com/atom.xml"
@@ -171,7 +174,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 6,
                             CategoryId = 2,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4718),
                             IsActive = true,
                             Name = "OpenAI Blog",
                             URL = "https://openai.com/blog/rss.xml"
@@ -180,7 +183,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 7,
                             CategoryId = 3,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4720),
                             IsActive = true,
                             Name = "Microsoft .NET Blog",
                             URL = "https://devblogs.microsoft.com/dotnet/feed/"
@@ -189,7 +192,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 8,
                             CategoryId = 3,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4721),
                             IsActive = true,
                             Name = "ASP.NET Weblog",
                             URL = "https://weblog.asp.net/rss"
@@ -198,7 +201,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 9,
                             CategoryId = 4,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4722),
                             IsActive = true,
                             Name = "Bits and Pieces",
                             URL = "https://blog.bitsrc.io/feed"
@@ -207,7 +210,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 10,
                             CategoryId = 4,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4724),
                             IsActive = true,
                             Name = "Node.js Blog",
                             URL = "https://nodejs.org/en/feed/blog.xml"
@@ -216,7 +219,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 11,
                             CategoryId = 4,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4725),
                             IsActive = true,
                             Name = "React Blog",
                             URL = "https://reactjs.org/feed.xml"
@@ -225,7 +228,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 12,
                             CategoryId = 5,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4726),
                             IsActive = true,
                             Name = "Krebs on Security",
                             URL = "https://krebsonsecurity.com/feed/"
@@ -234,7 +237,7 @@ namespace PulseWatch.API.Migrations
                         {
                             Id = 13,
                             CategoryId = 5,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedAt = new DateTime(2026, 9, 3, 18, 24, 30, 138, DateTimeKind.Utc).AddTicks(4727),
                             IsActive = true,
                             Name = "Dark Reading",
                             URL = "https://www.darkreading.com/rss.xml"
@@ -284,9 +287,6 @@ namespace PulseWatch.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("CategoryId")
-                        .HasColumnType("int");
-
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasMaxLength(5000)
@@ -307,8 +307,6 @@ namespace PulseWatch.API.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("CategoryId");
 
                     b.HasIndex("TrendId");
 
@@ -438,11 +436,6 @@ namespace PulseWatch.API.Migrations
 
             modelBuilder.Entity("PulseWatch.Core.Entities.Summary", b =>
                 {
-                    b.HasOne("PulseWatch.Core.Entities.Category", "Category")
-                        .WithMany()
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("PulseWatch.Core.Entities.Trend", "Trend")
                         .WithMany("Summaries")
                         .HasForeignKey("TrendId")
@@ -452,8 +445,6 @@ namespace PulseWatch.API.Migrations
                         .WithMany("Summaries")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Category");
 
                     b.Navigation("Trend");
 

@@ -1,296 +1,220 @@
-# 🗄️ Schéma de Base de Données - PulseWatch
+# 🗄️ Schéma de base de données — PulseWatch
 
-## 📊 Vue d'Ensemble
+Référence du modèle EF Core tel qu'il est réellement défini dans
+`PulseWatch.Core/Entities` et `PulseWatch.Data/Context/ApplicationDbContext.cs`.
+Six tables, pas une de plus.
 
-PulseWatch utilise une architecture de base de données relationnelle conçue pour stocker et analyser des flux d'informations technologiques.
+---
+
+## 📊 Vue d'ensemble
 
 ```mermaid
 erDiagram
-    User ||--o{ Category : creates
-    User ||--o{ Note : creates
-    User ||--o{ UserSession : has
+    User ||--o{ Category : owns
+    User ||--o{ Feed : owns
+    User ||--o{ Note : writes
+    User ||--o{ Summary : owns
     Category ||--o{ Feed : contains
     Category ||--o{ Note : categorizes
     Category ||--o{ Trend : analyzes
-    Feed ||--o{ Note : generates
-    Trend ||--o{ Summary : creates
-    User ||--o{ RefreshToken : owns
+    Category ||--o{ Summary : covers
+    Trend ||--o{ Summary : may_source
 
     User {
-        int id PK
-        string username
-        string email
-        string passwordHash
-        datetime createdAt
-        datetime updatedAt
-        boolean isActive
+        int Id PK
+        string Username UK
+        string Email UK
+        string PasswordHash
+        datetime CreatedAt
+        bool IsActive
+        string RefreshToken "nullable"
+        datetime RefreshTokenExpiryTime "nullable"
     }
 
     Category {
-        int id PK
-        string name
-        string description
-        string color
-        int userId FK
-        datetime createdAt
+        int Id PK
+        string Name
+        string Color "nullable"
+        datetime CreatedAt
+        int UserId FK "nullable, null = catégorie globale"
     }
 
     Feed {
-        int id PK
-        string name
-        string url
-        string description
-        int categoryId FK
-        boolean isActive
-        int refreshIntervalMinutes
-        datetime createdAt
-        datetime lastFetched
+        int Id PK
+        string URL
+        string Name
+        datetime CreatedAt
+        int CategoryId FK
+        int UserId FK "nullable"
+        bool IsActive
     }
 
     Note {
-        int id PK
-        string title
-        string content
-        string summary
-        string tags
-        int categoryId FK
-        int userId FK
-        int feedId FK
-        datetime createdAt
+        int Id PK
+        string Title
+        string Content
+        datetime CreatedAt
+        int CategoryId FK
+        int UserId FK
     }
 
     Trend {
-        int id PK
-        int categoryId FK
-        float score
-        json data
-        datetime generatedAt
-        datetime expiresAt
+        int Id PK
+        datetime GeneratedAt
+        double Score "nullable"
+        json Data "Dictionary~string,double~ sérialisé"
+        int CategoryId FK
     }
 
     Summary {
-        int id PK
-        string title
-        string content
-        int userId FK
-        int trendId FK
-        datetime createdAt
-    }
-
-    UserSession {
-        string id PK
-        int userId FK
-        string refreshToken
-        datetime expiresAt
-        boolean isActive
-        datetime createdAt
-    }
-
-    RefreshToken {
-        string id PK
-        int userId FK
-        string token
-        datetime expiresAt
-        boolean isUsed
-        datetime createdAt
+        int Id PK
+        string Title
+        string Content
+        datetime GeneratedAt
+        int TrendId FK "nullable"
+        int CategoryId FK "nullable"
+        int UserId FK "nullable"
     }
 ```
 
-## 📋 Tables Détaillées
-
-### 👤 **Users**
-Gestion des comptes utilisateurs et authentification.
-
-**Champs principaux :**
-- `id` : Identifiant unique
-- `username` : Nom d'utilisateur unique
-- `email` : Email unique pour login
-- `passwordHash` : Mot de passe hashé (bcrypt)
-- `isActive` : Compte actif/bloqué
-
-**Relations :**
-- Un utilisateur peut créer plusieurs catégories
-- Un utilisateur peut créer plusieurs notes
-- Un utilisateur a plusieurs sessions
+Il n'existe **ni table de sessions, ni table de jetons de rafraîchissement** : le
+jeton de rafraîchissement est porté par deux colonnes de `User`
+(`RefreshToken`, `RefreshTokenExpiryTime`).
 
 ---
 
-### 📁 **Categories**
-Organisation thématique du contenu.
+## 📋 Tables
 
-**Champs principaux :**
-- `id` : Identifiant unique
-- `name` : Nom de la catégorie (ex: "IA", "Cloud", "Cybersécurité")
-- `description` : Description détaillée
-- `color` : Code couleur pour l'UI
-- `userId` : Créateur de la catégorie
+### 👤 User
 
-**Exemples :**
-- "Intelligence Artificielle" (bleu)
-- "Cloud Computing" (vert)
-- "Cybersécurité" (rouge)
-- "Développement Web" (orange)
+Comptes et authentification.
 
----
+| Colonne | Notes |
+| --- | --- |
+| `Username`, `Email` | index **unique** chacun |
+| `PasswordHash` | requis |
+| `RefreshToken` | nullable, remplacé à chaque rafraîchissement |
 
-### 📡 **Feeds**
-Sources RSS/Atom de flux d'informations.
-
-**Champs principaux :**
-- `id` : Identifiant unique
-- `name` : Nom du flux (ex: "TechCrunch AI")
-- `url` : URL du flux RSS/Atom
-- `categoryId` : Catégorie associée
-- `isActive` : Flux actif ou en pause
-- `refreshIntervalMinutes` : Fréquence de récupération
-- `lastFetched` : Dernière récupération réussie
-
-**Exemples :**
-- RSS de TechCrunch
-- Flux de blog d'OpenAI
-- Actualités GitHub
+Un utilisateur possède ses catégories et ses résumés (`OnDelete: Restrict` — une
+suppression d'utilisateur est refusée tant qu'il reste des lignes liées).
 
 ---
 
-### 📝 **Notes**
-Contenu généré à partir des flux ou créé manuellement.
+### 📁 Category
 
-**Champs principaux :**
-- `id` : Identifiant unique
-- `title` : Titre de la note
-- `content` : Contenu complet
-- `summary` : Résumé généré par IA
-- `tags` : Étiquettes (JSON array)
-- `categoryId` : Catégorie associée
-- `userId` : Auteur
-- `feedId` : Flux source (optionnel)
+Organisation thématique. `Name` est requis, `Color` sert à l'interface.
 
-**Types de notes :**
-- Notes automatiques (générées depuis les feeds)
-- Notes manuelles (créées par l'utilisateur)
-- Notes enrichies (avec résumé IA)
+`UserId` est **nullable** : `null` désigne une catégorie globale, livrée avec le
+schéma. Les 5 catégories de référence (Tech News, Artificial Intelligence,
+C# / .NET, JavaScript & Web, Cybersecurity) sont dans ce cas.
+
+> Les catégories créées par un utilisateur ne portent pas encore son `UserId` :
+> le cloisonnement multi-tenant reste à faire.
 
 ---
 
-### 📈 **Trends**
-Analyses de tendances par catégorie.
+### 📡 Feed
 
-**Champs principaux :**
-- `id` : Identifiant unique
-- `categoryId` : Catégorie analysée
-- `score` : Score de tendance (0-100)
-- `data` : Données détaillées (JSON)
-- `generatedAt` : Date de génération
-- `expiresAt` : Date d'expiration
+Flux RSS/Atom. `URL` est requis, `IsActive` permet de suspendre un flux sans le
+supprimer, `CategoryId` le rattache à une catégorie.
 
-**Données dans `data` :**
-```json
-{
-  "keywords": ["AI", "machine learning", "GPT"],
-  "volume": 1250,
-  "growth": 15.5,
-  "sources": ["techcrunch.com", "arxiv.org"],
-  "sentiment": "positive"
-}
+Le contenu des articles **n'est pas stocké** : il est relu à la demande par
+`FeedService.FetchFeedContentAsync`, avec un cache mémoire de 10 minutes par
+flux. Aucune table d'articles n'existe.
+
+---
+
+### 📝 Note
+
+Notes de l'utilisateur, rattachées à une catégorie. `Title` et `Content` requis.
+
+---
+
+### 📈 Trend
+
+Résultat de l'analyse d'une catégorie.
+
+`Data` est un `Dictionary<string, double>` — mot-clé → score normalisé —
+sérialisé en JSON par un value converter déclaré dans `ConfigureTrend`. Il n'y a
+pas de colonne d'expiration : un trend est daté par `GeneratedAt`, rien ne le
+périme automatiquement.
+
+---
+
+### 📋 Summary
+
+Digest produit par l'agent, stocké en Markdown dans `Content`.
+
+**Les trois clés étrangères sont nullables**, et c'est structurant :
+
+| Colonne | Quand elle est renseignée |
+| --- | --- |
+| `CategoryId` | toujours, sur les deux chemins de génération |
+| `TrendId` | seulement pour un résumé généré à partir d'un trend |
+| `UserId` | l'auteur ; laissé libre pour une génération planifiée sans utilisateur |
+
+Un digest de catégorie n'est rattaché à aucun trend. Les lignes antérieures à
+l'ajout de `CategoryId` n'ont que leur trend — d'où la requête de
+`GetSummariesByCategoryAsync`, qui accepte les deux rattachements.
+
+Index : `IX_Summaries_CategoryId`, `IX_Summaries_TrendId`, `IX_Summaries_UserId`.
+
+---
+
+## 🔄 Flux de données
+
+### 1. Lecture d'un flux
+
+```
+Feed.URL ──► HttpClient ──► SyndicationFeed.Load ──► FeedContentDto[]
+                                                     (cache mémoire 10 min)
 ```
 
----
+Rien n'est écrit en base : les articles restent en mémoire le temps du
+traitement.
 
-### 📋 **Summaries**
-Résumés générés par IA des tendances.
+### 2. Analyse des tendances
 
-**Champs principaux :**
-- `id` : Identifiant unique
-- `title` : Titre du résumé
-- `content` : Contenu du résumé
-- `userId` : Utilisateur qui a demandé le résumé
-- `trendId` : Tendance associée
+```
+articles ──► TrendEngineService (TF-IDF) ──► Dictionary<mot-clé, score>
+                                             ──► Trend { Data, Score, GeneratedAt }
+```
 
----
+### 3. Digest
 
-### 🔐 **Sessions & Tokens**
-Gestion des sessions et tokens de rafraîchissement.
+```
+articles (5 à 40) ──► agent ADK ──► Digest { items[], dropped_count }
+                                    ──► Markdown ──► Summary { CategoryId, TrendId? }
+```
 
-**UserSession :**
-- Stocke les sessions actives
-- Gère les refresh tokens
-- Contrôle l'expiration
-
-**RefreshToken :**
-- Tokens uniques pour rafraîchissement
-- Rotation automatique des tokens
-- Sécurité contre les rejeux
+Les bornes 5–40 viennent du contrat de l'agent ; voir
+[GUIDE.md](GUIDE.md#la-fenêtre-darticles).
 
 ---
 
-## 🔄 Flux de Données
+## 🛠️ Contraintes et index
 
-### 1. **Récupération des Feeds**
-```
-Feed → Parser → Note → Category
-```
+**Index déclarés**
+- `User.Username` unique, `User.Email` unique
+- clés étrangères indexées : `Summaries.CategoryId`, `Summaries.TrendId`,
+  `Summaries.UserId`, `Feeds.CategoryId`, `Notes.CategoryId`, `Trends.CategoryId`
 
-### 2. **Analyse des Tendances**
-```
-Notes (par catégorie) → Analyse IA → Trend → Summary
-```
+**Suppressions**
+Toutes les relations sont en `DeleteBehavior.Restrict` : aucune suppression en
+cascade. Supprimer une catégorie qui porte des flux, des notes, des trends ou des
+résumés est refusé par la base.
 
-### 3. **Cycle de Vie**
-```
-User → Category → Feed → Note → Trend → Summary
-```
-
----
-
-## 🎯 Cas d'Usage
-
-### **Pour un développeur :**
-1. Créer une catégorie "React"
-2. Ajouter des feeds (blogs React, news)
-3. Les notes sont générées automatiquement
-4. Les tendances sont analysées chaque semaine
-5. Les résumés sont disponibles à la demande
-
-### **Pour une entreprise :**
-1. Catégories par domaine d'activité
-2. Surveillance concurrentielle via feeds
-3. Analyse de tendances pour anticiper le marché
-4. Résumés pour les décisions stratégiques
+**Migrations**
+Appliquées au démarrage par `Database.Migrate()`. Les données de référence
+utilisent une date figée (`SeedCreatedAt`) : voir
+[GUIDE.md](GUIDE.md#données-de-référence).
 
 ---
 
-## 🛠️ Optimisations
+## 📈 Ce qui manque encore
 
-### **Indexation :**
-- Index sur `categoryId` dans `Notes` et `Trends`
-- Index sur `userId` pour les requêtes utilisateur
-- Index sur `createdAt` pour les filtres temporels
-
-### **Performance :**
-- Partitionnement par date pour les grandes tables
-- Cache Redis pour les tendances fréquentes
-- Archivage des notes anciennes
-
-### **Sécurité :**
-- Hashage bcrypt pour les mots de passe
-- JWT avec refresh tokens
-- Rate limiting sur les endpoints sensibles
-
----
-
-## 📈 Évolutivité
-
-### **Phase 1 :** MVP Actuel
-- Gestion des catégories et feeds
-- Notes automatiques
-- Authentification basique
-
-### **Phase 2 :** Intelligence
-- Analyse de tendances avancée
-- Résumés multilingues
-- Alertes personnalisées
-
-### **Phase 3 :** Enterprise
-- Multi-tenancy
-- Analytics avancés
-- API publique pour partenaires
+- **Cloisonnement multi-tenant** : catégories et flux créés par l'interface ne
+  portent pas de `UserId`, donc tout le monde voit tout.
+- **Persistance des articles** : aucune table ne les garde, ce qui interdit tout
+  historique et impose de relire les flux à chaque analyse.
+- **Péremption des trends** : rien ne les périme, la lecture doit trier par date.
