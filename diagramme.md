@@ -44,20 +44,23 @@ classDiagram
         +DateTime GeneratedAt
         +Calculate()
     }
-class Summary  {
+    class Summary {
         +int Id
         +string Title
         +string Content
-        +DateTime CreatedAt
-        +GenerateSummay()
+        +DateTime GeneratedAt
+        +int? TrendId
+        +int? CategoryId
+        +int? UserId
     }
 
     User "1" --> "*" Category : owns
-    Trend  "1" --> "*" Summary : contains
     User "1" --> "*" Summary : owns
+    Trend "1" --> "*" Summary : may source
     Category "1" --> "*" Feed : contains
     Category "1" --> "*" Note : contains
     Category "1" --> "*" Trend : contains
+    Category "1" --> "*" Summary : covers
 ```
 
 # Category Model
@@ -147,26 +150,25 @@ Chaque trend peut générer plusieurs résumés (Summaries).
 
 ## 📘 Summary — Résumé Automatique des Tendances
 
-L'entité **Summary** représente un résumé généré automatiquement à partir des tendances
-analysées dans les différentes catégories d'un utilisateur. Il s'agit d'un digest
-journalier (ou à la demande) envoyé à l'utilisateur pour l'informer des évolutions
-marquantes dans ses domaines de veille.
+L'entité **Summary** représente un digest produit par l'agent ADK à partir des
+articles des flux d'une catégorie. Il est généré à la demande, et conservé pour
+que l'utilisateur retrouve l'historique de sa veille.
 
 ### ✨ Champs
 
 - **Id** _(int)_ — identifiant unique
-- **UserId** _(int)_ — utilisateur destinataire du résumé
-- **CategoryId** _(int?)_ — catégorie concernée (optionnel)
-- **Content** _(string)_ — contenu du résumé (texte, Markdown ou JSON)
-- **CreatedAt** _(DateTime)_ — date de génération
-- **TrendGeneratedAt** _(DateTime?)_ — date d'analyse des trends utilisés
-- **SourceTrendIds** _(string)_ — liste JSON des trends ayant servi à créer le résumé
+- **Title** _(string)_ — titre généré, ex. « Actualités Cybersecurity : 10/09/2026 »
+- **Content** _(string)_ — le digest, en Markdown
+- **GeneratedAt** _(DateTime)_ — date de génération
+- **CategoryId** _(int?)_ — catégorie couverte, renseignée sur les deux chemins
+- **TrendId** _(int?)_ — trend d'origine, `null` pour un digest de catégorie
+- **UserId** _(int?)_ — auteur ; libre pour une génération planifiée
 
 ### 🔗 Relations
 
 - Un **User** peut posséder plusieurs **Summaries**
-- Un **Summary** s'appuie sur un ou plusieurs **Trends**
-- Optionnellement associé à une **Category** pour un digest ciblé
+- Un **Summary** couvre une **Category**
+- Un **Summary** peut s'appuyer sur un **Trend**, sans obligation
 
 ### 🎯 Utilité
 
