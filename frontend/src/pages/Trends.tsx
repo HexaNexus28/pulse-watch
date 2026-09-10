@@ -210,7 +210,10 @@ const Trends: React.FC = () => {
             Analyze trends and patterns in your data
           </p>
         </div>
-        <div className="flex space-x-2">
+        {/* flex-wrap : a 375px, « Generate Summaries » et « Export » cote a cote
+            poussaient la page a 404px de large et provoquaient un defilement
+            horizontal. */}
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setShowGenerateModal(true)}
             className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

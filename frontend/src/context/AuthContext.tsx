@@ -86,6 +86,30 @@ interface AuthContextType extends AuthState {
   refreshToken: () => Promise<void>;
 }
 
+/**
+ * Identifiant de l'utilisateur porté par le JWT (claim `nameid`, posé par
+ * AuthService côté API).
+ *
+ * La charge utile est lue sans vérifier la signature : elle ne sert qu'à savoir
+ * quel profil recharger. Toute réponse reste autorisée par le serveur, qui lui
+ * valide le jeton — un jeton falsifié ne donne accès à rien de plus.
+ *
+ * Retourne null si le jeton est illisible : l'appelant nettoie alors la session.
+ */
+const getUserIdFromToken = (token: string): number | null => {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const id = Number(JSON.parse(json).nameid);
+
+    return Number.isInteger(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+};
+
 // Create context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -101,24 +125,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       const token = localStorage.getItem('auth_token');
-      if (token) {
-        try {
-          const response = await api.get<User>(API_ENDPOINTS.USER.BASE);
-          if (response.success && response.data) {
-            dispatch({ type: 'AUTH_SUCCESS', payload: response.data });
-          } else {
-            // Invalid token, clear it
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('refresh_token');
-            dispatch({ type: 'AUTH_FAILURE', payload: 'Your session has expired. Please login again.' });
-          }
-        } catch (error) {
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('refresh_token');
-          dispatch({ type: 'AUTH_FAILURE', payload: 'Your session has expired. Please login again.' });
+
+      if (!token) {
+        // Aucun jeton : l'utilisateur est anonyme. LOGOUT et non AUTH_SUCCESS —
+        // ce dernier passait isAuthenticated à true sans session, ce qui ouvrait
+        // toute l'application aux visiteurs et renvoyait /register vers
+        // /dashboard, rendant l'inscription inatteignable.
+        dispatch({ type: 'LOGOUT' });
+        return;
+      }
+
+      const clearSession = () => {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        dispatch({ type: 'AUTH_FAILURE', payload: 'Your session has expired. Please login again.' });
+      };
+
+      // L'API n'expose pas d'endpoint « utilisateur courant » : l'identifiant
+      // vient du jeton, que le serveur revalide de toute façon à chaque appel.
+      const userId = getUserIdFromToken(token);
+      if (userId === null) {
+        clearSession();
+        return;
+      }
+
+      try {
+        const response = await api.get<User>(API_ENDPOINTS.USER.BY_ID(userId));
+        if (response.success && response.data) {
+          dispatch({ type: 'AUTH_SUCCESS', payload: response.data });
+        } else {
+          clearSession();
         }
-      } else {
-        dispatch({ type: 'AUTH_SUCCESS', payload: null as any });
+      } catch (error) {
+        clearSession();
       }
     };
 

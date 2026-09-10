@@ -179,7 +179,9 @@ const Profile: React.FC = () => {
 
         {/* Tabs */}
         <div className="border-t border-gray-200 dark:border-gray-700">
-          <nav className="flex space-x-8">
+          {/* Les quatre onglets mesurent 491px : ils debordaient d'un ecran de
+              375px. La barre defile plutot que d'etirer la page. */}
+          <nav className="flex space-x-8 overflow-x-auto">
             {[
               { id: 'profile', label: 'Profile', icon: User },
               { id: 'security', label: 'Security', icon: Shield },

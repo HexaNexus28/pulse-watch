@@ -54,6 +54,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     }
   }, [darkMode]);
 
+  // Sur mobile, le tiroir couvre la page. Sans cette fermeture, choisir une
+  // destination laissait le menu ouvert par-dessus la page qu'on venait
+  // d'ouvrir, et il fallait le refermer a la main a chaque navigation.
+  React.useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className={`min-h-screen bg-gray-50 dark:bg-gray-900 ${darkMode ? 'dark' : ''}`}>
       <OfflineIndicator />
@@ -192,11 +199,22 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </main>
       </div>
       
-      {/* PWA Install Prompt */}
-      <PWAInstallPrompt />
-      
-      {/* Push Notification Manager */}
-      <PushNotificationManager />
+      {/*
+        Pile unique des encarts flottants.
+
+        Chacun se positionnait auparavant en `fixed` pour son compte, l'un en
+        bas a droite, l'autre en bas a gauche. Ils s'ignoraient donc : a 1280px
+        l'encart de notifications (320px) debordait sous la sidebar (256px) et
+        passait derriere elle, a 375px les deux se recouvraient sur 236x86px.
+
+        Ils sont desormais empiles dans un seul conteneur, qui est le seul a
+        connaitre sa position. `pointer-events-none` sur la pile et `auto` sur
+        les cartes : la zone vide entre elles ne capture pas les clics.
+      */}
+      <div className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex flex-col items-end gap-3 sm:inset-x-auto sm:right-4">
+        <PWAInstallPrompt />
+        <PushNotificationManager />
+      </div>
     </div>
   );
 };
