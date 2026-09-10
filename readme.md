@@ -262,13 +262,4 @@ La suite reste à définir.
 
 ---
 
-## 👥 Contributeurs
-
-- **HexaNexus28** — conception et développement
-- **[Claude Code](https://claude.com/claude-code)** (Claude Opus 5) — contributeur :
-  agent de digest, correctifs backend et frontend, documentation.
-  Les commits correspondants portent un `Co-Authored-By`.
-
----
-
 **PulseWatch** — Votre veille technologique, intelligente et automatisée.
