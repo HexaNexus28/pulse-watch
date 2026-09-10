@@ -261,11 +261,25 @@ app.MapControllers();
 // Endpoint pour les erreurs
 app.Map("/error", (HttpContext context) => Results.Problem());
 
-// Ensure database is created
+// Applique les migrations en attente.
+//
+// EnsureCreated() ne les applique jamais : il cree le schema a partir du modele
+// quand la base n'existe pas, et ne fait rien quand elle existe. Les migrations
+// livrees dans Migrations/ n'etaient donc executees nulle part, et une base deja
+// en place gardait son ancien schema. NullableSummaryTrendId ne serait jamais
+// passee : le premier digest de categorie, dont le TrendId est null, aurait
+// echoue sur une colonne restee NOT NULL — en production seulement, puisque sur
+// une base neuve EnsureCreated produisait deja le bon schema.
+//
+// Une base creee auparavant par EnsureCreated n'a pas de table
+// __EFMigrationsHistory : Migrate() tentera de rejouer la migration initiale et
+// echouera sur des tables existantes. Il faut l'amorcer une fois, avec
+// `dotnet ef migrations add ... --no-build` puis un INSERT des migrations deja
+// contenues dans le schema, ou repartir d'une base vide.
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    context.Database.EnsureCreated();
+    context.Database.Migrate();
 }
 
 app.Run();

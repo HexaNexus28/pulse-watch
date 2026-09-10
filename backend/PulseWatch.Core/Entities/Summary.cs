@@ -33,6 +33,23 @@ namespace PulseWatch.Core.Entities
         [ForeignKey(nameof(TrendId))]
         public virtual Trend? Trend { get; set; }
 
+        /// <summary>
+        /// Categorie couverte par le resume.
+        /// </summary>
+        /// <remarks>
+        /// Depuis que TrendId est nullable, le trend ne peut plus servir de seul
+        /// chemin vers la categorie : un digest de categorie n'en a pas, et il
+        /// devenait alors invisible sur l'endpoint cense lister les resumes
+        /// d'une categorie. La categorie est donc portee ici directement.
+        ///
+        /// Nullable pour les lignes anterieures a cette colonne, dont la
+        /// categorie n'est connue que via Trend.
+        /// </remarks>
+        public int? CategoryId { get; set; }
+
+        [ForeignKey(nameof(CategoryId))]
+        public virtual Category? Category { get; set; }
+
         // Optionnel : résumé généré pour un user particulier
         public int? UserId { get; set; }
 
