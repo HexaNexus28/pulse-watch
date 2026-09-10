@@ -134,10 +134,12 @@ namespace PulseWatch.Business.Services
                         $"Summary with ID {id} not found");
                 }
 
-                // Soft delete
-                Summary = null;
-
-                _unitOfWork.Summaries.Update(Summary);
+                // Suppression franche : Summary ne porte aucune colonne d'etat
+                // (pas d'IsDeleted, pas de DeletedAt), il n'y a donc rien a
+                // marquer. Le code precedent affectait null a la variable locale
+                // puis passait ce null a Update() — ArgumentNullException a tous
+                // les coups, jamais une suppression.
+                _unitOfWork.Summaries.Remove(Summary);
                 await _unitOfWork.SaveChangesAsync();
 
 

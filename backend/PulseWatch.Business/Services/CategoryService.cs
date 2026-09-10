@@ -83,6 +83,15 @@ namespace PulseWatch.Business.Services
                 var category = _mapper.Map<Category>(createCategoryDto);
                 var createdCategory = await _unitOfWork.Categories.AddAsync(category);
 
+                // AddAsync ne fait qu'inscrire l'entite dans le change tracker.
+                // Sans ce SaveChangesAsync, la creation etait perdue a la fin de
+                // la requete : l'API repondait « Category created successfully »
+                // avec un Id a 0, et la categorie n'apparaissait dans aucune
+                // lecture. UpdateCategoryAsync et DeleteCategoryAsync, elles,
+                // l'appelaient deja.
+                await _unitOfWork.SaveChangesAsync();
+
+                // Mappe apres l'enregistrement : c'est lui qui renseigne l'Id.
                 var categoryDto = _mapper.Map<CategoryResponseDto>(createdCategory);
                 return ApiResponse<CategoryResponseDto>.SuccessResponse(
                     categoryDto,
